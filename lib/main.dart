@@ -924,8 +924,9 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isDesktop = constraints.maxWidth >= 900;
+            final isMobile = constraints.maxWidth < 600;
             final leftPanel = _buildLeftPanel();
-            final rightPanel = _buildRightPanel();
+            final rightPanel = _buildRightPanel(isMobile: isMobile);
 
             final content = isDesktop
                 ? Row(
@@ -1011,9 +1012,11 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     );
   }
 
-  Widget _buildRightPanel() {
+  Widget _buildRightPanel({required bool isMobile}) {
     final viewportHeight = MediaQuery.sizeOf(context).height;
-    final chartHeight = (viewportHeight * 0.62).clamp(420.0, 560.0).toDouble();
+    final chartHeight = isMobile
+        ? 340.0
+        : (viewportHeight * 0.62).clamp(420.0, 560.0).toDouble();
 
     // 只要目前「沒有實際選到任何幣種或模型」，
     // 不論 selectedCategory 是否仍保留先前的分類，都視為空白狀態。
@@ -1036,7 +1039,10 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         children: [
           // 左側選到 USDC/TUSD 或 BTC 時顯示右上方 K 線圖。
           if (hasSelectedKlineCoin) ...[
-            SizedBox(height: chartHeight, child: _buildKlinePanel()),
+            SizedBox(
+              height: chartHeight,
+              child: _buildKlinePanel(isMobile: isMobile),
+            ),
             const SizedBox(height: 16),
           ],
           ConstrainedBox(
@@ -1050,7 +1056,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     );
   }
 
-  Widget _buildKlinePanel() {
+  Widget _buildKlinePanel({required bool isMobile}) {
     final candles = activeKlineData;
     final latest = candles.isEmpty ? null : candles.last;
     final latestColor = latest == null || latest.close >= latest.open
@@ -1126,7 +1132,9 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
               ],
               const Spacer(),
               Text(
-                '${candles.length} 根 K 棒',
+                isMobile
+                    ? '左右滑動 · ${candles.length} 根'
+                    : '${candles.length} 根 K 棒',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.white.withValues(alpha: 0.42),
@@ -1163,13 +1171,13 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
             ),
           ],
           const SizedBox(height: 8),
-          Expanded(child: _buildKlineChartBody()),
+          Expanded(child: _buildKlineChartBody(isMobile: isMobile)),
         ],
       ),
     );
   }
 
-  Widget _buildKlineChartBody() {
+  Widget _buildKlineChartBody({required bool isMobile}) {
     final candles = activeKlineData;
 
     if (isKlineLoading && klineDataByCoin.isEmpty) {
@@ -1213,7 +1221,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       );
     }
 
-    return InteractiveCandlestickChart(candles: candles);
+    return InteractiveCandlestickChart(candles: candles, mobileMode: isMobile);
   }
 
   Widget _buildKlineCoinButton(String coin) {
@@ -2536,8 +2544,13 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
 /// 並將該筆資料索引交給 [CandlestickChartPainter] 畫出垂直標示線與時間標籤。
 class InteractiveCandlestickChart extends StatefulWidget {
   final List<CandlestickData> candles;
+  final bool mobileMode;
 
-  const InteractiveCandlestickChart({super.key, required this.candles});
+  const InteractiveCandlestickChart({
+    super.key,
+    required this.candles,
+    required this.mobileMode,
+  });
 
   @override
   State<InteractiveCandlestickChart> createState() =>
@@ -2547,13 +2560,33 @@ class InteractiveCandlestickChart extends StatefulWidget {
 class _InteractiveCandlestickChartState
     extends State<InteractiveCandlestickChart> {
   int? _hoveredOriginalIndex;
+  int _mobileWindowOffset = 0;
+  double _dragAccumulator = 0;
 
   @override
   void didUpdateWidget(covariant InteractiveCandlestickChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.candles, widget.candles)) {
+    if (!identical(oldWidget.candles, widget.candles) ||
+        oldWidget.mobileMode != widget.mobileMode) {
       _hoveredOriginalIndex = null;
+      _mobileWindowOffset = 0;
+      _dragAccumulator = 0;
     }
+  }
+
+  double _rightAxisWidth() => widget.mobileMode ? 58.0 : 76.0;
+
+  int _visibleCount(Size size) {
+    const chartLeft = 6.0;
+    final chartRight = math.max(chartLeft + 20, size.width - _rightAxisWidth());
+    final chartWidth = chartRight - chartLeft;
+    final widthBasedCount = math.max(8, (chartWidth / 15).floor());
+    final targetCount = widget.mobileMode ? 20 : math.min(55, widthBasedCount);
+    return math.min(widget.candles.length, targetCount);
+  }
+
+  int _maximumWindowOffset(Size size) {
+    return math.max(0, widget.candles.length - _visibleCount(size));
   }
 
   void _updateHover(Offset localPosition, Size size) {
@@ -2563,7 +2596,7 @@ class _InteractiveCandlestickChartState
     }
 
     const chartLeft = 6.0;
-    const rightAxisWidth = 76.0;
+    final rightAxisWidth = _rightAxisWidth();
     final chartRight = math.max(chartLeft + 20, size.width - rightAxisWidth);
     final chartWidth = chartRight - chartLeft;
 
@@ -2573,9 +2606,7 @@ class _InteractiveCandlestickChartState
       return;
     }
 
-    final widthBasedCount = math.max(8, (chartWidth / 15).floor());
-    final maxVisibleCount = math.min(55, widthBasedCount);
-    final visibleCount = math.min(widget.candles.length, maxVisibleCount);
+    final visibleCount = _visibleCount(size);
 
     if (visibleCount <= 0) {
       _clearHover();
@@ -2586,7 +2617,12 @@ class _InteractiveCandlestickChartState
     final visibleIndex = ((localPosition.dx - chartLeft) / slotWidth)
         .floor()
         .clamp(0, visibleCount - 1);
-    final firstOriginalIndex = widget.candles.length - visibleCount;
+    final clampedOffset = _mobileWindowOffset.clamp(
+      0,
+      _maximumWindowOffset(size),
+    );
+    final windowEndIndex = widget.candles.length - clampedOffset;
+    final firstOriginalIndex = windowEndIndex - visibleCount;
     final originalIndex = firstOriginalIndex + visibleIndex;
 
     if (_hoveredOriginalIndex != originalIndex) {
@@ -2604,23 +2640,64 @@ class _InteractiveCandlestickChartState
     }
   }
 
+  void _handleHorizontalDrag(DragUpdateDetails details, Size size) {
+    if (!widget.mobileMode || widget.candles.isEmpty) return;
+
+    const chartLeft = 6.0;
+    final chartRight = math.max(chartLeft + 20, size.width - _rightAxisWidth());
+    final visibleCount = _visibleCount(size);
+    if (visibleCount <= 0) return;
+
+    final slotWidth = (chartRight - chartLeft) / visibleCount;
+    _dragAccumulator += details.delta.dx;
+    final candleSteps = (_dragAccumulator / slotWidth).truncate();
+    if (candleSteps == 0) return;
+
+    _dragAccumulator -= candleSteps * slotWidth;
+    final nextOffset = (_mobileWindowOffset + candleSteps).clamp(
+      0,
+      _maximumWindowOffset(size),
+    );
+    if (nextOffset == _mobileWindowOffset) return;
+
+    setState(() {
+      _mobileWindowOffset = nextOffset;
+      _hoveredOriginalIndex = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
+        final chart = CustomPaint(
+          painter: CandlestickChartPainter(
+            candles: widget.candles,
+            hoveredOriginalIndex: _hoveredOriginalIndex,
+            mobileMode: widget.mobileMode,
+            windowOffset: _mobileWindowOffset,
+          ),
+          child: const SizedBox.expand(),
+        );
+
+        if (widget.mobileMode) {
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => _updateHover(details.localPosition, size),
+            onHorizontalDragStart: (_) => _dragAccumulator = 0,
+            onHorizontalDragUpdate: (details) =>
+                _handleHorizontalDrag(details, size),
+            child: chart,
+          );
+        }
+
         return MouseRegion(
           cursor: SystemMouseCursors.basic,
           onHover: (event) => _updateHover(event.localPosition, size),
           onExit: (_) => _clearHover(),
-          child: CustomPaint(
-            painter: CandlestickChartPainter(
-              candles: widget.candles,
-              hoveredOriginalIndex: _hoveredOriginalIndex,
-            ),
-            child: const SizedBox.expand(),
-          ),
+          child: chart,
         );
       },
     );
@@ -2631,10 +2708,14 @@ class _InteractiveCandlestickChartState
 class CandlestickChartPainter extends CustomPainter {
   final List<CandlestickData> candles;
   final int? hoveredOriginalIndex;
+  final bool mobileMode;
+  final int windowOffset;
 
   const CandlestickChartPainter({
     required this.candles,
     this.hoveredOriginalIndex,
+    required this.mobileMode,
+    required this.windowOffset,
   });
 
   static const Color _upColor = Color(0xFFFF453A);
@@ -2647,7 +2728,7 @@ class CandlestickChartPainter extends CustomPainter {
     if (candles.isEmpty || size.width < 120 || size.height < 90) return;
 
     const chartLeft = 6.0;
-    const rightAxisWidth = 76.0;
+    final rightAxisWidth = mobileMode ? 58.0 : 76.0;
     const bottomAxisHeight = 28.0;
     const priceVolumeGap = 10.0;
 
@@ -2665,10 +2746,13 @@ class CandlestickChartPainter extends CustomPainter {
 
     // 減少同時顯示的數量，讓每根 K 棒更寬、更容易辨識。
     final widthBasedCount = math.max(8, (chartWidth / 15).floor());
-    final maxVisibleCount = math.min(55, widthBasedCount);
-    final visibleCount = math.min(candles.length, maxVisibleCount);
-    final firstVisibleOriginalIndex = candles.length - visibleCount;
-    final visible = candles.sublist(firstVisibleOriginalIndex);
+    final targetCount = mobileMode ? 20 : math.min(55, widthBasedCount);
+    final visibleCount = math.min(candles.length, targetCount);
+    final maximumWindowOffset = math.max(0, candles.length - visibleCount);
+    final clampedWindowOffset = windowOffset.clamp(0, maximumWindowOffset);
+    final windowEndIndex = candles.length - clampedWindowOffset;
+    final firstVisibleOriginalIndex = windowEndIndex - visibleCount;
+    final visible = candles.sublist(firstVisibleOriginalIndex, windowEndIndex);
 
     final int? hoveredVisibleIndex =
         hoveredOriginalIndex != null &&
@@ -2718,7 +2802,7 @@ class CandlestickChartPainter extends CustomPainter {
         _formatAxisPrice(value, priceRange),
         Offset(chartRight + 6, y - 7),
         color: _axisTextColor,
-        fontSize: 12,
+        fontSize: mobileMode ? 10 : 12,
       );
     }
 
@@ -2824,7 +2908,11 @@ class CandlestickChartPainter extends CustomPainter {
     for (final index in timeIndices) {
       final centerX = chartLeft + slotWidth * (index + 0.5);
       final label = _formatTimeLabel(visible[index].time);
-      final painter = _textPainter(label, color: _axisTextColor, fontSize: 11);
+      final painter = _textPainter(
+        label,
+        color: _axisTextColor,
+        fontSize: mobileMode ? 9 : 11,
+      );
       final maximumX = math.max(chartLeft, chartRight - painter.width);
       final x = (centerX - painter.width / 2)
           .clamp(chartLeft, maximumX)
@@ -2928,6 +3016,8 @@ class CandlestickChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(CandlestickChartPainter oldDelegate) {
     return oldDelegate.candles != candles ||
-        oldDelegate.hoveredOriginalIndex != hoveredOriginalIndex;
+        oldDelegate.hoveredOriginalIndex != hoveredOriginalIndex ||
+        oldDelegate.mobileMode != mobileMode ||
+        oldDelegate.windowOffset != windowOffset;
   }
 }
