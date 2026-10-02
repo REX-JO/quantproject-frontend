@@ -595,6 +595,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   };
 
   String? hoveredCategory;
+  String? expandedCategory;
   String? selectedCategory;
 
   /// 幣種與模型皆支援複選。
@@ -2160,6 +2161,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     required bool showModels,
   }) {
     final isHovered = hoveredCategory == category;
+    final isOpen = isHovered || expandedCategory == category;
     final hasSelection = _hasSelectedCategory(category);
     final canSelectModels = category == '穩定幣' && hasSelectedStablecoin;
 
@@ -2189,46 +2191,59 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         ),
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          category,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                setState(() {
+                  expandedCategory = expandedCategory == category
+                      ? null
+                      : category;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 15,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            category,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.48),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.48),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  AnimatedRotation(
-                    turns: isHovered ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white.withValues(alpha: 0.65),
+                    AnimatedRotation(
+                      turns: isOpen ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white.withValues(alpha: 0.65),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             AnimatedSize(
               duration: const Duration(milliseconds: 220),
-              child: isHovered
+              child: isOpen
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                       child: Column(
