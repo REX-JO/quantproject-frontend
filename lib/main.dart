@@ -1026,7 +1026,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   Widget _buildRightPanel({required bool isMobile}) {
     final viewportHeight = MediaQuery.sizeOf(context).height;
     final chartHeight = isMobile
-        ? 380.0
+        ? 480.0
         : (viewportHeight * 0.62).clamp(420.0, 560.0).toDouble() + 40.0;
 
     // 只要目前「沒有實際選到任何幣種或模型」，
