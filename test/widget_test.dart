@@ -83,6 +83,10 @@ void main() {
     );
 
     final chart = find.byType(InteractiveCandlestickChart);
+    final controlsBottom = tester.getBottomLeft(find.byTooltip('放大 K 線')).dy;
+    final plotTop = tester.getTopLeft(_chartPaintFinder()).dy;
+    expect(controlsBottom, lessThanOrEqualTo(plotTop));
+
     await tester.tapAt(tester.getCenter(chart));
     await tester.pump();
     expect(_chartPainter(tester).inspectedOriginalIndex, isNotNull);

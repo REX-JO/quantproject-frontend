@@ -2790,9 +2790,10 @@ class _InteractiveCandlestickChartState
   }
 
   Widget _chartControls(Size size) {
-    return Positioned(
-      top: 8,
-      left: 8,
+    const buttonConstraints = BoxConstraints.tightFor(width: 32, height: 32);
+
+    return Align(
+      alignment: Alignment.centerLeft,
       child: Material(
         color: const Color(0xE61C1C1F),
         borderRadius: BorderRadius.circular(6),
@@ -2801,18 +2802,24 @@ class _InteractiveCandlestickChartState
           children: [
             IconButton(
               tooltip: '放大 K 線',
+              constraints: buttonConstraints,
+              padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               onPressed: () => _zoomBy(-5, size),
               icon: const Icon(Icons.add, size: 17),
             ),
             IconButton(
               tooltip: '縮小 K 線',
+              constraints: buttonConstraints,
+              padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               onPressed: () => _zoomBy(5, size),
               icon: const Icon(Icons.remove, size: 17),
             ),
             IconButton(
               tooltip: '查看較早 K 線',
+              constraints: buttonConstraints,
+              padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               onPressed: _windowOffset < _maximumWindowOffset(size)
                   ? () => _moveWindowBy(
@@ -2824,6 +2831,8 @@ class _InteractiveCandlestickChartState
             ),
             IconButton(
               tooltip: '查看較新 K 線',
+              constraints: buttonConstraints,
+              padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               onPressed: _windowOffset > 0
                   ? () => _moveWindowBy(
@@ -2839,6 +2848,8 @@ class _InteractiveCandlestickChartState
                 icon: const Icon(Icons.last_page_rounded, size: 17),
                 label: const Text('回最新'),
                 style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   visualDensity: VisualDensity.compact,
                   foregroundColor: const Color(0xFF64D2FF),
                 ),
@@ -2853,7 +2864,11 @@ class _InteractiveCandlestickChartState
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        const toolbarHeight = 40.0;
+        final size = Size(
+          constraints.maxWidth,
+          math.max(90.0, constraints.maxHeight - toolbarHeight),
+        );
         final visibleCount = _visibleCount(size);
 
         final chart = CustomPaint(
@@ -2891,9 +2906,10 @@ class _InteractiveCandlestickChartState
           ),
         );
 
-        return Stack(
+        return Column(
           children: [
-            Positioned.fill(
+            SizedBox(height: toolbarHeight, child: _chartControls(size)),
+            Expanded(
               child: MouseRegion(
                 cursor: SystemMouseCursors.precise,
                 onHover: (event) {
@@ -2907,7 +2923,6 @@ class _InteractiveCandlestickChartState
                 child: gestures,
               ),
             ),
-            _chartControls(size),
           ],
         );
       },
