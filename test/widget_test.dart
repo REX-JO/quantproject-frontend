@@ -155,6 +155,15 @@ void main() {
     await tester.pump();
     expect(_chartPainter(tester).visibleCount, lessThan(initialVisibleCount));
 
+    await tester.tap(find.byTooltip('查看較早 K 線'));
+    await tester.pump();
+    final buttonOffset = _chartPainter(tester).windowOffset;
+    expect(buttonOffset, greaterThan(0));
+
+    await tester.tap(find.byTooltip('查看較新 K 線'));
+    await tester.pump();
+    expect(_chartPainter(tester).windowOffset, lessThan(buttonOffset));
+
     await tester.drag(chart, const Offset(120, 0));
     await tester.pump();
     expect(_chartPainter(tester).windowOffset, greaterThan(0));

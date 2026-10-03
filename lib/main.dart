@@ -2762,6 +2762,21 @@ class _InteractiveCandlestickChartState
     _setVisibleCount(_visibleCount(size) + candleDelta, size);
   }
 
+  void _moveWindowBy(int candleDelta, Size size) {
+    final nextOffset = (_windowOffset + candleDelta).clamp(
+      0,
+      _maximumWindowOffset(size),
+    );
+    if (nextOffset == _windowOffset) return;
+    setState(() {
+      _windowOffset = nextOffset;
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
+    });
+    widget.onInspectionChanged?.call(null);
+  }
+
   void _resetView() {
     setState(() {
       _windowOffset = 0;
@@ -2795,6 +2810,28 @@ class _InteractiveCandlestickChartState
               visualDensity: VisualDensity.compact,
               onPressed: () => _zoomBy(5, size),
               icon: const Icon(Icons.remove, size: 17),
+            ),
+            IconButton(
+              tooltip: '查看較早 K 線',
+              visualDensity: VisualDensity.compact,
+              onPressed: _windowOffset < _maximumWindowOffset(size)
+                  ? () => _moveWindowBy(
+                      math.max(1, _visibleCount(size) ~/ 3),
+                      size,
+                    )
+                  : null,
+              icon: const Icon(Icons.chevron_left_rounded, size: 19),
+            ),
+            IconButton(
+              tooltip: '查看較新 K 線',
+              visualDensity: VisualDensity.compact,
+              onPressed: _windowOffset > 0
+                  ? () => _moveWindowBy(
+                      -math.max(1, _visibleCount(size) ~/ 3),
+                      size,
+                    )
+                  : null,
+              icon: const Icon(Icons.chevron_right_rounded, size: 19),
             ),
             if (_windowOffset > 0 || _zoomVisibleCount != null)
               TextButton.icon(
