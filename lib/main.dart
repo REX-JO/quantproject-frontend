@@ -1150,8 +1150,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
               Expanded(
                 child: Text(
                   isMobile
-                      ? '${candles.length} 根 · 點選查看 · 滑動平移'
-                      : '${candles.length} 根 · 滑鼠查看 · 拖曳平移 · 滾輪縮放',
+                      ? '${candles.length} 根 · 點選鎖定 · 滑動平移'
+                      : '${candles.length} 根 · 滑鼠查看／點擊鎖定 · 拖曳平移 · 滾輪縮放',
                   maxLines: 2,
                   textAlign: TextAlign.right,
                   style: TextStyle(
