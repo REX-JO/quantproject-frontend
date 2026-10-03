@@ -2611,7 +2611,7 @@ class _InteractiveCandlestickChartState
   int _windowOffset = 0;
   int? _zoomVisibleCount;
   double _dragAccumulator = 0;
-  int _scaleStartVisibleCount = 0;
+  bool _isDragging = false;
 
   @override
   void didUpdateWidget(covariant InteractiveCandlestickChart oldWidget) {
@@ -2842,20 +2842,14 @@ class _InteractiveCandlestickChartState
             behavior: HitTestBehavior.opaque,
             onTapDown: (details) =>
                 _inspectAt(details.localPosition, size, lockSelection: true),
-            onScaleStart: (_) {
+            onHorizontalDragStart: (_) {
               _dragAccumulator = 0;
-              _scaleStartVisibleCount = visibleCount;
+              _isDragging = true;
             },
-            onScaleUpdate: (details) {
-              if ((details.scale - 1).abs() > 0.02) {
-                _setVisibleCount(
-                  (_scaleStartVisibleCount / details.scale).round(),
-                  size,
-                );
-              } else {
-                _handleHorizontalDrag(details.focalPointDelta.dx, size);
-              }
-            },
+            onHorizontalDragUpdate: (details) =>
+                _handleHorizontalDrag(details.delta.dx, size),
+            onHorizontalDragEnd: (_) => _isDragging = false,
+            onHorizontalDragCancel: () => _isDragging = false,
             child: chart,
           ),
         );
@@ -2865,8 +2859,11 @@ class _InteractiveCandlestickChartState
             Positioned.fill(
               child: MouseRegion(
                 cursor: SystemMouseCursors.precise,
-                onHover: (event) =>
-                    _inspectAt(event.localPosition, size, lockSelection: false),
+                onHover: (event) {
+                  if (!_isDragging) {
+                    _inspectAt(event.localPosition, size, lockSelection: false);
+                  }
+                },
                 onExit: (_) {
                   if (!_inspectionLocked) _clearInspection();
                 },
