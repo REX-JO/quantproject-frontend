@@ -74931,7 +74931,7 @@ k=A.dm(e,A.cZ(q,B.X,B.S,B.N),B.o,e,s,e,e,e,B.CL,e,e,e)
 s=d.c
 s.toString
 j=A.bF(s,B.eJ,t.w).w.a.b
-i=b?340:B.d.bN(j*0.62,420,560)
+i=b?380:B.d.bN(j*0.62,420,560)+40
 h=p.length===0&&d.x.length===0?B.d.bN(j*0.7,520,650):220
 s=d.Ma()
 q=A.c([],r)
