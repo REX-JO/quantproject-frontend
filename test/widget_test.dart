@@ -67,6 +67,7 @@ void main() {
   });
 
   testWidgets('手機 K 線可點擊並左右滑動', (WidgetTester tester) async {
+    CandlestickData? inspected;
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
@@ -75,6 +76,7 @@ void main() {
           child: InteractiveCandlestickChart(
             candles: _candles(100),
             mobileMode: true,
+            onInspectionChanged: (value) => inspected = value,
           ),
         ),
       ),
@@ -83,14 +85,50 @@ void main() {
     final chart = find.byType(InteractiveCandlestickChart);
     await tester.tapAt(tester.getCenter(chart));
     await tester.pump();
-    expect(_chartPainter(tester).hoveredOriginalIndex, isNotNull);
+    expect(_chartPainter(tester).inspectedOriginalIndex, isNotNull);
+    expect(_chartPainter(tester).inspectionLocked, isTrue);
+    expect(inspected, isNotNull);
 
     await tester.drag(chart, const Offset(120, 0));
     await tester.pump();
     expect(_chartPainter(tester).windowOffset, greaterThan(0));
+    expect(find.text('回最新'), findsOneWidget);
   });
 
-  testWidgets('電腦 K 線保留滑鼠 hover 且不啟用觸控滑動', (WidgetTester tester) async {
+  testWidgets('手機在 K 線上垂直滑動仍可捲動頁面', (WidgetTester tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 500,
+          child: ListView(
+            controller: controller,
+            children: [
+              const SizedBox(height: 100),
+              SizedBox(
+                height: 340,
+                child: InteractiveCandlestickChart(
+                  candles: _candles(100),
+                  mobileMode: true,
+                ),
+              ),
+              const SizedBox(height: 600),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byType(InteractiveCandlestickChart),
+      const Offset(0, -150),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
+  });
+
+  testWidgets('電腦 K 線支援滑鼠查看、平移、縮放及回到最新', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
@@ -110,9 +148,18 @@ void main() {
     await mouse.addPointer(location: tester.getCenter(chart));
     await mouse.moveTo(tester.getCenter(chart) + const Offset(10, 0));
     await tester.pump();
-    expect(_chartPainter(tester).hoveredOriginalIndex, isNotNull);
+    expect(_chartPainter(tester).inspectedOriginalIndex, isNotNull);
+
+    final initialVisibleCount = _chartPainter(tester).visibleCount;
+    await tester.tap(find.byTooltip('放大 K 線'));
+    await tester.pump();
+    expect(_chartPainter(tester).visibleCount, lessThan(initialVisibleCount));
 
     await tester.drag(chart, const Offset(120, 0));
+    await tester.pump();
+    expect(_chartPainter(tester).windowOffset, greaterThan(0));
+
+    await tester.tap(find.text('回最新'));
     await tester.pump();
     expect(_chartPainter(tester).windowOffset, 0);
   });

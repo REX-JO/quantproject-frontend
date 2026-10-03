@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -611,6 +612,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   bool isKlineLoading = false;
   String? klineErrorMessage;
   DateTime? klineLastUpdatedAt;
+  CandlestickData? inspectedKlineCandle;
+  String? inspectedKlineCoin;
 
   /// 第一層 key 是幣種，第二層 key 是模型顯示名稱。
   /// 例如：modelRiskData['USDC']?['XGBoost']。
@@ -722,6 +725,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       errorMessage = null;
       klineErrorMessage = null;
       cryptoErrorMessage = null;
+      inspectedKlineCandle = null;
+      inspectedKlineCoin = null;
     });
 
     try {
@@ -743,6 +748,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
             !availableSelected.contains(selectedKlineCoin)) {
           selectedKlineCoin = availableSelected.first;
         }
+        inspectedKlineCandle = null;
+        inspectedKlineCoin = null;
 
         lastUpdatedAt = updatedAt;
         klineLastUpdatedAt = updatedAt;
@@ -846,6 +853,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         selectedCoins.add(coin);
         selectedKlineCoin = coin;
       }
+      inspectedKlineCandle = null;
+      inspectedKlineCoin = null;
 
       if (category == '穩定幣') {
         if (selectedCoins.isEmpty) {
@@ -910,6 +919,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       isKlineLoading = false;
       isCryptoLoading = false;
       klineErrorMessage = null;
+      inspectedKlineCandle = null;
+      inspectedKlineCoin = null;
     });
   }
 
@@ -1059,7 +1070,12 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   Widget _buildKlinePanel({required bool isMobile}) {
     final candles = activeKlineData;
     final latest = candles.isEmpty ? null : candles.last;
-    final latestColor = latest == null || latest.close >= latest.open
+    final inspected = inspectedKlineCoin == selectedKlineCoin
+        ? inspectedKlineCandle
+        : null;
+    final displayed = inspected ?? latest;
+    final displayedColor =
+        displayed == null || displayed.close >= displayed.open
         ? const Color(0xFFFF453A)
         : const Color(0xFF30D158);
 
@@ -1087,7 +1103,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$selectedKlineCoin K 線圖',
+                      '$selectedKlineCoin 1h K 線圖',
                       style: const TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w700,
@@ -1130,33 +1146,52 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
                 if (i > 0) const SizedBox(width: 8),
                 _buildKlineCoinButton(selectedKlineCoins[i]),
               ],
-              const Spacer(),
-              Text(
-                isMobile
-                    ? '左右滑動 · ${candles.length} 根'
-                    : '${candles.length} 根 K 棒',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.42),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isMobile
+                      ? '${candles.length} 根 · 點選查看 · 滑動平移'
+                      : '${candles.length} 根 · 滑鼠查看 · 拖曳平移 · 滾輪縮放',
+                  maxLines: 2,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.42),
+                  ),
                 ),
               ),
             ],
           ),
-          if (latest != null) ...[
+          if (displayed != null) ...[
             const SizedBox(height: 12),
+            Text(
+              inspected == null
+                  ? '最新 1h K 棒 · ${_formatTime(displayed.time)}'
+                  : '指定 1h K 棒 · ${_formatTime(displayed.time)}',
+              style: TextStyle(
+                fontSize: 11,
+                color: inspected == null
+                    ? Colors.white.withValues(alpha: 0.42)
+                    : const Color(0xFF64D2FF),
+              ),
+            ),
+            const SizedBox(height: 5),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildKlineValue('開', _formatKlineNumber(latest.open)),
-                  _buildKlineValue('高', _formatKlineNumber(latest.high)),
-                  _buildKlineValue('低', _formatKlineNumber(latest.low)),
+                  _buildKlineValue('開', _formatKlineNumber(displayed.open)),
+                  _buildKlineValue('高', _formatKlineNumber(displayed.high)),
+                  _buildKlineValue('低', _formatKlineNumber(displayed.low)),
                   _buildKlineValue(
                     '收',
-                    _formatKlineNumber(latest.close),
-                    valueColor: latestColor,
+                    _formatKlineNumber(displayed.close),
+                    valueColor: displayedColor,
                   ),
-                  _buildKlineValue('量', _formatVolume(latest.volume)),
+                  _buildKlineValue(
+                    '成交量 ($selectedKlineCoin)',
+                    _formatVolume(displayed.volume),
+                  ),
                 ],
               ),
             ),
@@ -1221,7 +1256,17 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       );
     }
 
-    return InteractiveCandlestickChart(candles: candles, mobileMode: isMobile);
+    return InteractiveCandlestickChart(
+      candles: candles,
+      mobileMode: isMobile,
+      onInspectionChanged: (candle) {
+        if (!mounted) return;
+        setState(() {
+          inspectedKlineCandle = candle;
+          inspectedKlineCoin = candle == null ? null : selectedKlineCoin;
+        });
+      },
+    );
   }
 
   Widget _buildKlineCoinButton(String coin) {
@@ -1238,6 +1283,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
             ? () {
                 setState(() {
                   selectedKlineCoin = coin;
+                  inspectedKlineCandle = null;
+                  inspectedKlineCoin = null;
                 });
               }
             : null,
@@ -2538,18 +2585,17 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   }
 }
 
-/// 可用滑鼠移動查看每一根 K 棒的時間。
-///
-/// 滑鼠進入價格/成交量繪圖區後，會找出距離游標最近的 K 棒，
-/// 並將該筆資料索引交給 [CandlestickChartPainter] 畫出垂直標示線與時間標籤。
+/// 支援查看、鎖定、平移與縮放的互動式 K 線圖。
 class InteractiveCandlestickChart extends StatefulWidget {
   final List<CandlestickData> candles;
   final bool mobileMode;
+  final ValueChanged<CandlestickData?>? onInspectionChanged;
 
   const InteractiveCandlestickChart({
     super.key,
     required this.candles,
     required this.mobileMode,
+    this.onInspectionChanged,
   });
 
   @override
@@ -2559,17 +2605,24 @@ class InteractiveCandlestickChart extends StatefulWidget {
 
 class _InteractiveCandlestickChartState
     extends State<InteractiveCandlestickChart> {
-  int? _hoveredOriginalIndex;
-  int _mobileWindowOffset = 0;
+  int? _inspectedOriginalIndex;
+  bool _inspectionLocked = false;
+  Offset? _crosshairPosition;
+  int _windowOffset = 0;
+  int? _zoomVisibleCount;
   double _dragAccumulator = 0;
+  int _scaleStartVisibleCount = 0;
 
   @override
   void didUpdateWidget(covariant InteractiveCandlestickChart oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.candles, widget.candles) ||
         oldWidget.mobileMode != widget.mobileMode) {
-      _hoveredOriginalIndex = null;
-      _mobileWindowOffset = 0;
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
+      _windowOffset = 0;
+      _zoomVisibleCount = null;
       _dragAccumulator = 0;
     }
   }
@@ -2581,7 +2634,8 @@ class _InteractiveCandlestickChartState
     final chartRight = math.max(chartLeft + 20, size.width - _rightAxisWidth());
     final chartWidth = chartRight - chartLeft;
     final widthBasedCount = math.max(8, (chartWidth / 15).floor());
-    final targetCount = widget.mobileMode ? 20 : math.min(55, widthBasedCount);
+    final defaultCount = widget.mobileMode ? 20 : math.min(55, widthBasedCount);
+    final targetCount = _zoomVisibleCount ?? defaultCount;
     return math.min(widget.candles.length, targetCount);
   }
 
@@ -2589,10 +2643,9 @@ class _InteractiveCandlestickChartState
     return math.max(0, widget.candles.length - _visibleCount(size));
   }
 
-  void _updateHover(Offset localPosition, Size size) {
+  int? _indexAt(Offset localPosition, Size size) {
     if (widget.candles.isEmpty || size.width < 120 || size.height < 90) {
-      _clearHover();
-      return;
+      return null;
     }
 
     const chartLeft = 6.0;
@@ -2602,68 +2655,161 @@ class _InteractiveCandlestickChartState
 
     // 滑鼠位於價格刻度區之外時，不顯示 hover。
     if (localPosition.dx < chartLeft || localPosition.dx > chartRight) {
-      _clearHover();
-      return;
+      return null;
     }
 
     final visibleCount = _visibleCount(size);
 
-    if (visibleCount <= 0) {
-      _clearHover();
-      return;
-    }
+    if (visibleCount <= 0) return null;
 
     final slotWidth = chartWidth / visibleCount;
     final visibleIndex = ((localPosition.dx - chartLeft) / slotWidth)
         .floor()
         .clamp(0, visibleCount - 1);
-    final clampedOffset = _mobileWindowOffset.clamp(
-      0,
-      _maximumWindowOffset(size),
-    );
+    final clampedOffset = _windowOffset.clamp(0, _maximumWindowOffset(size));
     final windowEndIndex = widget.candles.length - clampedOffset;
     final firstOriginalIndex = windowEndIndex - visibleCount;
-    final originalIndex = firstOriginalIndex + visibleIndex;
+    return firstOriginalIndex + visibleIndex;
+  }
 
-    if (_hoveredOriginalIndex != originalIndex) {
-      setState(() {
-        _hoveredOriginalIndex = originalIndex;
-      });
+  void _inspectAt(
+    Offset localPosition,
+    Size size, {
+    required bool lockSelection,
+  }) {
+    if (_inspectionLocked && !lockSelection) return;
+    final originalIndex = _indexAt(localPosition, size);
+    if (originalIndex == null) {
+      if (!lockSelection) _clearInspection();
+      return;
+    }
+
+    if (lockSelection &&
+        _inspectionLocked &&
+        _inspectedOriginalIndex == originalIndex) {
+      _clearInspection();
+      return;
+    }
+
+    final changedIndex = _inspectedOriginalIndex != originalIndex;
+    setState(() {
+      _inspectedOriginalIndex = originalIndex;
+      _inspectionLocked = lockSelection;
+      _crosshairPosition = localPosition;
+    });
+    if (changedIndex || lockSelection) {
+      widget.onInspectionChanged?.call(widget.candles[originalIndex]);
     }
   }
 
-  void _clearHover() {
-    if (_hoveredOriginalIndex != null) {
-      setState(() {
-        _hoveredOriginalIndex = null;
-      });
-    }
+  void _clearInspection() {
+    if (_inspectedOriginalIndex == null && _crosshairPosition == null) return;
+    setState(() {
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
+    });
+    widget.onInspectionChanged?.call(null);
   }
 
-  void _handleHorizontalDrag(DragUpdateDetails details, Size size) {
-    if (!widget.mobileMode || widget.candles.isEmpty) return;
-
+  void _handleHorizontalDrag(double horizontalDelta, Size size) {
+    if (widget.candles.isEmpty) return;
     const chartLeft = 6.0;
     final chartRight = math.max(chartLeft + 20, size.width - _rightAxisWidth());
     final visibleCount = _visibleCount(size);
     if (visibleCount <= 0) return;
 
     final slotWidth = (chartRight - chartLeft) / visibleCount;
-    _dragAccumulator += details.delta.dx;
+    _dragAccumulator += horizontalDelta;
     final candleSteps = (_dragAccumulator / slotWidth).truncate();
     if (candleSteps == 0) return;
 
     _dragAccumulator -= candleSteps * slotWidth;
-    final nextOffset = (_mobileWindowOffset + candleSteps).clamp(
+    final nextOffset = (_windowOffset + candleSteps).clamp(
       0,
       _maximumWindowOffset(size),
     );
-    if (nextOffset == _mobileWindowOffset) return;
+    if (nextOffset == _windowOffset) return;
 
     setState(() {
-      _mobileWindowOffset = nextOffset;
-      _hoveredOriginalIndex = null;
+      _windowOffset = nextOffset;
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
     });
+    widget.onInspectionChanged?.call(null);
+  }
+
+  void _setVisibleCount(int count, Size size) {
+    if (widget.candles.isEmpty) return;
+    final minimum = math.min(8, widget.candles.length);
+    final next = count.clamp(minimum, widget.candles.length);
+    if (next == _visibleCount(size)) return;
+    setState(() {
+      _zoomVisibleCount = next;
+      _windowOffset = _windowOffset.clamp(
+        0,
+        math.max(0, widget.candles.length - next),
+      );
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
+    });
+    widget.onInspectionChanged?.call(null);
+  }
+
+  void _zoomBy(int candleDelta, Size size) {
+    _setVisibleCount(_visibleCount(size) + candleDelta, size);
+  }
+
+  void _resetView() {
+    setState(() {
+      _windowOffset = 0;
+      _zoomVisibleCount = null;
+      _inspectedOriginalIndex = null;
+      _inspectionLocked = false;
+      _crosshairPosition = null;
+      _dragAccumulator = 0;
+    });
+    widget.onInspectionChanged?.call(null);
+  }
+
+  Widget _chartControls(Size size) {
+    return Positioned(
+      top: 8,
+      left: 8,
+      child: Material(
+        color: const Color(0xE61C1C1F),
+        borderRadius: BorderRadius.circular(6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: '放大 K 線',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _zoomBy(-5, size),
+              icon: const Icon(Icons.add, size: 17),
+            ),
+            IconButton(
+              tooltip: '縮小 K 線',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _zoomBy(5, size),
+              icon: const Icon(Icons.remove, size: 17),
+            ),
+            if (_windowOffset > 0 || _zoomVisibleCount != null)
+              TextButton.icon(
+                onPressed: _resetView,
+                icon: const Icon(Icons.last_page_rounded, size: 17),
+                label: const Text('回最新'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: const Color(0xFF64D2FF),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -2671,33 +2817,64 @@ class _InteractiveCandlestickChartState
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final visibleCount = _visibleCount(size);
 
         final chart = CustomPaint(
           painter: CandlestickChartPainter(
             candles: widget.candles,
-            hoveredOriginalIndex: _hoveredOriginalIndex,
+            inspectedOriginalIndex: _inspectedOriginalIndex,
+            inspectionLocked: _inspectionLocked,
+            crosshairPosition: _crosshairPosition,
             mobileMode: widget.mobileMode,
-            windowOffset: _mobileWindowOffset,
+            windowOffset: _windowOffset,
+            visibleCount: visibleCount,
           ),
           child: const SizedBox.expand(),
         );
 
-        if (widget.mobileMode) {
-          return GestureDetector(
+        final gestures = Listener(
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              _zoomBy(event.scrollDelta.dy > 0 ? 5 : -5, size);
+            }
+          },
+          child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => _updateHover(details.localPosition, size),
-            onHorizontalDragStart: (_) => _dragAccumulator = 0,
-            onHorizontalDragUpdate: (details) =>
-                _handleHorizontalDrag(details, size),
+            onTapDown: (details) =>
+                _inspectAt(details.localPosition, size, lockSelection: true),
+            onScaleStart: (_) {
+              _dragAccumulator = 0;
+              _scaleStartVisibleCount = visibleCount;
+            },
+            onScaleUpdate: (details) {
+              if ((details.scale - 1).abs() > 0.02) {
+                _setVisibleCount(
+                  (_scaleStartVisibleCount / details.scale).round(),
+                  size,
+                );
+              } else {
+                _handleHorizontalDrag(details.focalPointDelta.dx, size);
+              }
+            },
             child: chart,
-          );
-        }
+          ),
+        );
 
-        return MouseRegion(
-          cursor: SystemMouseCursors.basic,
-          onHover: (event) => _updateHover(event.localPosition, size),
-          onExit: (_) => _clearHover(),
-          child: chart,
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.precise,
+                onHover: (event) =>
+                    _inspectAt(event.localPosition, size, lockSelection: false),
+                onExit: (_) {
+                  if (!_inspectionLocked) _clearInspection();
+                },
+                child: gestures,
+              ),
+            ),
+            _chartControls(size),
+          ],
         );
       },
     );
@@ -2707,15 +2884,21 @@ class _InteractiveCandlestickChartState
 /// 不依賴第三方圖表套件的 K 線與成交量繪圖器。
 class CandlestickChartPainter extends CustomPainter {
   final List<CandlestickData> candles;
-  final int? hoveredOriginalIndex;
+  final int? inspectedOriginalIndex;
+  final bool inspectionLocked;
+  final Offset? crosshairPosition;
   final bool mobileMode;
   final int windowOffset;
+  final int visibleCount;
 
   const CandlestickChartPainter({
     required this.candles,
-    this.hoveredOriginalIndex,
+    this.inspectedOriginalIndex,
+    required this.inspectionLocked,
+    this.crosshairPosition,
     required this.mobileMode,
     required this.windowOffset,
+    required this.visibleCount,
   });
 
   static const Color _upColor = Color(0xFFFF453A);
@@ -2744,21 +2927,17 @@ class CandlestickChartPainter extends CustomPainter {
 
     if (priceHeight <= 20) return;
 
-    // 減少同時顯示的數量，讓每根 K 棒更寬、更容易辨識。
-    final widthBasedCount = math.max(8, (chartWidth / 15).floor());
-    final targetCount = mobileMode ? 20 : math.min(55, widthBasedCount);
-    final visibleCount = math.min(candles.length, targetCount);
     final maximumWindowOffset = math.max(0, candles.length - visibleCount);
     final clampedWindowOffset = windowOffset.clamp(0, maximumWindowOffset);
     final windowEndIndex = candles.length - clampedWindowOffset;
     final firstVisibleOriginalIndex = windowEndIndex - visibleCount;
     final visible = candles.sublist(firstVisibleOriginalIndex, windowEndIndex);
 
-    final int? hoveredVisibleIndex =
-        hoveredOriginalIndex != null &&
-            hoveredOriginalIndex! >= firstVisibleOriginalIndex &&
-            hoveredOriginalIndex! < candles.length
-        ? hoveredOriginalIndex! - firstVisibleOriginalIndex
+    final int? inspectedVisibleIndex =
+        inspectedOriginalIndex != null &&
+            inspectedOriginalIndex! >= firstVisibleOriginalIndex &&
+            inspectedOriginalIndex! < windowEndIndex
+        ? inspectedOriginalIndex! - firstVisibleOriginalIndex
         : null;
 
     var minimumPrice = visible.first.low;
@@ -2890,16 +3069,43 @@ class CandlestickChartPainter extends CustomPainter {
         ..strokeWidth = 1,
     );
 
-    // 滑鼠所在 K 棒的垂直十字線。
-    if (hoveredVisibleIndex != null) {
-      final hoverX = chartLeft + slotWidth * (hoveredVisibleIndex + 0.5);
+    // 滑鼠或觸控選取 K 棒時顯示垂直、水平十字線。
+    if (inspectedVisibleIndex != null) {
+      final hoverX = chartLeft + slotWidth * (inspectedVisibleIndex + 0.5);
+      final crosshairColor = Colors.white.withValues(
+        alpha: inspectionLocked ? 0.72 : 0.46,
+      );
       canvas.drawLine(
         Offset(hoverX, chartTop),
         Offset(hoverX, chartBottom),
         Paint()
-          ..color = Colors.white.withValues(alpha: 0.46)
+          ..color = crosshairColor
           ..strokeWidth = 1,
       );
+
+      final pointerY = crosshairPosition?.dy;
+      if (pointerY != null && pointerY >= chartTop && pointerY <= priceBottom) {
+        canvas.drawLine(
+          Offset(chartLeft, pointerY),
+          Offset(chartRight, pointerY),
+          Paint()
+            ..color = crosshairColor
+            ..strokeWidth = 1,
+        );
+
+        final ratio = ((pointerY - chartTop) / priceHeight)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        final crosshairPrice = maximumPrice - priceRange * ratio;
+        _drawAxisTag(
+          canvas,
+          text: _formatAxisPrice(crosshairPrice, priceRange),
+          x: chartRight + 2,
+          centerY: pointerY,
+          background: const Color(0xFF4A4A4F),
+          maximumWidth: rightAxisWidth - 2,
+        );
+      }
     }
 
     canvas.restore();
@@ -2921,10 +3127,10 @@ class CandlestickChartPainter extends CustomPainter {
     }
 
     // Hover 時在時間軸上顯示精確時間，並以深色標籤突顯。
-    if (hoveredVisibleIndex != null) {
-      final hovered = visible[hoveredVisibleIndex];
-      final hoverX = chartLeft + slotWidth * (hoveredVisibleIndex + 0.5);
-      final label = _formatFullTimeLabel(hovered.time);
+    if (inspectedVisibleIndex != null) {
+      final inspected = visible[inspectedVisibleIndex];
+      final hoverX = chartLeft + slotWidth * (inspectedVisibleIndex + 0.5);
+      final label = _formatFullTimeLabel(inspected.time);
       final painter = _textPainter(label, color: Colors.white, fontSize: 12);
 
       const horizontalPadding = 7.0;
@@ -2947,6 +3153,39 @@ class CandlestickChartPainter extends CustomPainter {
         Offset(boxX + horizontalPadding, boxY + verticalPadding),
       );
     }
+
+    _drawAxisTag(
+      canvas,
+      text: _formatAxisPrice(visible.last.close, priceRange),
+      x: chartRight + 2,
+      centerY: latestCloseY,
+      background: visible.last.close >= visible.last.open
+          ? _upColor
+          : _downColor,
+      maximumWidth: rightAxisWidth - 2,
+    );
+  }
+
+  static void _drawAxisTag(
+    Canvas canvas, {
+    required String text,
+    required double x,
+    required double centerY,
+    required Color background,
+    required double maximumWidth,
+  }) {
+    final painter = _textPainter(text, color: Colors.white, fontSize: 10);
+    const verticalPadding = 3.0;
+    const horizontalPadding = 4.0;
+    final width = math.min(maximumWidth, painter.width + horizontalPadding * 2);
+    final height = painter.height + verticalPadding * 2;
+    final top = centerY - height / 2;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(x, top, width, height),
+      const Radius.circular(3),
+    );
+    canvas.drawRRect(rect, Paint()..color = background);
+    painter.paint(canvas, Offset(x + horizontalPadding, top + verticalPadding));
   }
 
   static String _formatAxisPrice(double value, double range) {
@@ -3016,8 +3255,11 @@ class CandlestickChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(CandlestickChartPainter oldDelegate) {
     return oldDelegate.candles != candles ||
-        oldDelegate.hoveredOriginalIndex != hoveredOriginalIndex ||
+        oldDelegate.inspectedOriginalIndex != inspectedOriginalIndex ||
+        oldDelegate.inspectionLocked != inspectionLocked ||
+        oldDelegate.crosshairPosition != crosshairPosition ||
         oldDelegate.mobileMode != mobileMode ||
-        oldDelegate.windowOffset != windowOffset;
+        oldDelegate.windowOffset != windowOffset ||
+        oldDelegate.visibleCount != visibleCount;
   }
 }
