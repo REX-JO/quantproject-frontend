@@ -37,19 +37,19 @@ class CryptoDashboardApp extends StatelessWidget {
 // 1. 單一穩定幣模型資料
 // ============================================================
 
-/// USDC 或 TUSD 的單一預測模型五項資料。
+/// USDC 或 TUSD 的單一模型五項輸出。
 class StablecoinModelMetrics {
   final double currentPrice;
   final double future6hLow;
   final double priceDiff;
-  final double depegProbability;
+  final double riskScore;
   final String riskLevel;
 
   const StablecoinModelMetrics({
     required this.currentPrice,
     required this.future6hLow,
     required this.priceDiff,
-    required this.depegProbability,
+    required this.riskScore,
     required this.riskLevel,
   });
 
@@ -69,10 +69,7 @@ class StablecoinModelMetrics {
       currentPrice: _readDouble(payload, '${prefix}_current_price'),
       future6hLow: _readDouble(payload, '${prefix}_future_6h_low'),
       priceDiff: _readDouble(payload, '${prefix}_price_diff'),
-      depegProbability: _readProbability(
-        payload,
-        '${prefix}_depeg_probability',
-      ),
+      riskScore: _readRiskScore(payload, '${prefix}_depeg_probability'),
       riskLevel: _readText(payload, '${prefix}_risk_level'),
     );
   }
@@ -105,10 +102,10 @@ class StablecoinModelMetrics {
     throw FormatException('欄位 $key 不是有效數字，收到：$value');
   }
 
-  /// 後端的 depeg_probability 已經是百分比數值。
+  /// 後端沿用 depeg_probability 欄位名稱，但畫面只將數值視為風險分數。
   ///
-  /// 例如後端回傳 25 或 "25%"，前端都保留為 25。
-  static double _readProbability(Map<String, dynamic> json, String key) {
+  /// 例如後端回傳 25 或 "25%"，前端都轉成 0 到 100 的分數。
+  static double _readRiskScore(Map<String, dynamic> json, String key) {
     return _readDouble(json, key).clamp(0.0, 100.0).toDouble();
   }
 
@@ -266,14 +263,34 @@ class StablecoinModelDefinition {
   }
 }
 
+class StablecoinRegressionDefinition {
+  final String displayName;
+  final int featureCount;
+
+  const StablecoinRegressionDefinition({
+    required this.displayName,
+    required this.featureCount,
+  });
+
+  factory StablecoinRegressionDefinition.fromPayload(
+    Map<String, dynamic> payload,
+  ) {
+    return StablecoinRegressionDefinition(
+      displayName: payload['display_name']?.toString() ?? '未知模型',
+      featureCount: (payload['feature_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class StablecoinModelInfo {
   final int predictionHorizonHours;
   final String predictionTarget;
   final String klineInterval;
   final int inputKlineCount;
   final double? validationRocAuc;
-  final String validationMetricNote;
+  final String datasetPeriod;
   final Map<String, StablecoinModelDefinition> models;
+  final List<StablecoinRegressionDefinition> regressionModels;
 
   const StablecoinModelInfo({
     required this.predictionHorizonHours,
@@ -281,8 +298,9 @@ class StablecoinModelInfo {
     required this.klineInterval,
     required this.inputKlineCount,
     required this.validationRocAuc,
-    required this.validationMetricNote,
+    required this.datasetPeriod,
     required this.models,
+    required this.regressionModels,
   });
 
   factory StablecoinModelInfo.fromPayload(Map<String, dynamic> payload) {
@@ -297,6 +315,18 @@ class StablecoinModelInfo {
         models[model.displayName] = model;
       }
     }
+    final regressionModels = <StablecoinRegressionDefinition>[];
+    final rawRegressionModels = payload['regression_models'];
+    if (rawRegressionModels is List) {
+      for (final rawModel in rawRegressionModels) {
+        if (rawModel is! Map) continue;
+        regressionModels.add(
+          StablecoinRegressionDefinition.fromPayload(
+            Map<String, dynamic>.from(rawModel),
+          ),
+        );
+      }
+    }
 
     return StablecoinModelInfo(
       predictionHorizonHours: (payload['prediction_horizon_hours'] as num)
@@ -307,9 +337,11 @@ class StablecoinModelInfo {
       validationRocAuc: payload['validation_roc_auc'] is num
           ? (payload['validation_roc_auc'] as num).toDouble()
           : null,
-      validationMetricNote:
-          payload['validation_metric_note']?.toString() ?? '未提供驗證指標',
+      datasetPeriod:
+          payload['dataset_period']?.toString() ??
+          '2023～2025 年 Binance 1h K 線資料',
       models: models,
+      regressionModels: regressionModels,
     );
   }
 }
@@ -578,10 +610,32 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   final ScrollController _pageScrollController = ScrollController();
 
   // 模型顯示名稱。
-  static const String modelEnsemble = 'XGBoost+Transformer';
   static const String modelTransformer0995 = 'Transformer0.995';
   static const String modelTransformer099 = 'Transformer0.99';
   static const String modelXGBoost = 'XGBoost';
+
+  String _displayModelName(String modelName) {
+    if (modelName == modelTransformer0995) return 'Transformer 0.995';
+    if (modelName == modelTransformer099) return 'Transformer 0.99';
+    return modelName;
+  }
+
+  String _classificationTarget(String coin, String modelName) {
+    if (coin == 'USDC') {
+      if (modelName == modelTransformer0995) {
+        return '下一個 1h 時點收盤價是否低於 0.995';
+      }
+      if (modelName == modelTransformer099) {
+        return '未來區間最低價是否低於 0.99';
+      }
+      return '目前時點收盤價是否低於 0.995';
+    }
+
+    if (modelName == modelTransformer0995) {
+      return '未來區間最低價是否低於 0.995';
+    }
+    return '未來區間最低價是否低於 0.99';
+  }
 
   /// 模型顯示名稱對應 JSON 中的模型代稱。
   ///
@@ -589,7 +643,6 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   /// USDC + ensemble -> usdc_ensemble
   /// TUSD + xgboost -> tusd_xgboost
   static const Map<String, String> modelJsonSuffixes = {
-    modelEnsemble: 'ensemble',
     modelTransformer0995: 'transformer_0995',
     modelTransformer099: 'transformer_099',
     modelXGBoost: 'xgboost',
@@ -634,7 +687,6 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   final List<String> stableCoins = ['USDC', 'TUSD'];
 
   final List<String> models = const [
-    modelEnsemble,
     modelTransformer0995,
     modelTransformer099,
     modelXGBoost,
@@ -982,7 +1034,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
           const SizedBox(height: 8),
           Text(
             '一般加密貨幣可複選 BTC、ETH、SOL、XRP；'
-            '穩定幣可複選 USDC、TUSD 與預測模型。',
+            '穩定幣可複選 USDC、TUSD 與分類模型；結果區另列迴歸模型比較。',
             style: TextStyle(
               fontSize: 13,
               height: 1.5,
@@ -999,7 +1051,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
           const SizedBox(height: 12),
           _buildHoverCategoryMenu(
             category: '穩定幣',
-            subtitle: 'USDC、TUSD 與四種預測模型',
+            subtitle: 'USDC、TUSD、三個分類模型與兩個迴歸模型',
             coins: stableCoins,
             showModels: true,
           ),
@@ -1402,7 +1454,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       return _buildEmptyState(
         icon: Icons.model_training_rounded,
         title: '請選擇預測模型',
-        message: '目前幣種為 ${coins.join('、')}；四個模型皆支援同時複選。',
+        message: '目前幣種為 ${coins.join('、')}；三個分類模型皆支援同時複選。',
       );
     }
 
@@ -1447,7 +1499,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         ),
         const SizedBox(height: 6),
         Text(
-          '已選幣種：${coins.join('、')}　｜　已選模型：${selectedModels.join('、')}',
+          '已選幣種：${coins.join('、')}　｜　已選模型：${selectedModels.map(_displayModelName).join('、')}',
           style: TextStyle(
             fontSize: 12,
             color: Colors.white.withValues(alpha: 0.45),
@@ -1690,57 +1742,85 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     return '${normalize(start)} ～ ${normalize(end)}';
   }
 
-  /// 顯示單一幣種底下所有已選模型。
+  /// 依任務顯示單一幣種的市場資料、分類監測與迴歸估計。
   Widget _buildCoinResultSection({required String coin}) {
     final coinData =
         modelRiskData[coin] ?? const <String, StablecoinModelMetrics>{};
+    final firstData = coinData.values.firstOrNull;
+    final selectedTransformer = selectedModels
+        .where(
+          (modelName) =>
+              modelName == modelTransformer0995 ||
+              modelName == modelTransformer099,
+        )
+        .firstOrNull;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF64D2FF).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: const Color(0xFF64D2FF).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Text(
-                coin,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF64D2FF),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Divider(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        for (
-          int modelIndex = 0;
-          modelIndex < selectedModels.length;
-          modelIndex++
-        ) ...[
-          if (coinData[selectedModels[modelIndex]] != null)
-            _buildModelMetricSection(
-              coin: coin,
-              modelName: selectedModels[modelIndex],
-              data: coinData[selectedModels[modelIndex]]!,
-            ),
-          if (modelIndex != selectedModels.length - 1)
-            const SizedBox(height: 8),
-        ],
-        if (stablecoinModelInfoByCoin[coin] != null) ...[
+        _buildCoinHeading(coin),
+        if (firstData != null) ...[
           const SizedBox(height: 10),
+          _buildTaskHeading(
+            icon: Icons.currency_exchange_rounded,
+            title: '市場資料',
+            description: '最新一根 1h K 線的收盤價，供模型輸出比較使用。',
+          ),
+          const SizedBox(height: 7),
+          SizedBox(
+            width: 260,
+            child: _buildCompactMetricCell(
+              title: '目前價格',
+              value: _formatUsd(firstData.currentPrice),
+              jsonKey: '${coin.toLowerCase()}_current_price',
+              subtitle: '$coin 最新市場價格',
+              color: const Color(0xFF64D2FF),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        _buildTaskHeading(
+          icon: Icons.notification_important_outlined,
+          title: '分類模型監測',
+          description: '各模型依自己的標籤輸出未校準風險分數，不視為事件發生機率。',
+        ),
+        const SizedBox(height: 7),
+        for (final modelName in selectedModels) ...[
+          if (coinData[modelName] != null)
+            _buildClassificationModelSection(
+              coin: coin,
+              modelName: modelName,
+              data: coinData[modelName]!,
+            ),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 8),
+        _buildTaskHeading(
+          icon: Icons.show_chart_rounded,
+          title: '迴歸模型比較',
+          description: '估計未來 6 小時最低價格；相同迴歸器只顯示一次。',
+        ),
+        const SizedBox(height: 7),
+        if (selectedTransformer != null &&
+            coinData[selectedTransformer] != null) ...[
+          _buildRegressionModelSection(
+            coin: coin,
+            modelName: 'Transformer Regression',
+            data: coinData[selectedTransformer]!,
+            jsonModelName: selectedTransformer,
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (selectedModels.contains(modelXGBoost) &&
+            coinData[modelXGBoost] != null)
+          _buildRegressionModelSection(
+            coin: coin,
+            modelName: 'XGBoost Regression',
+            data: coinData[modelXGBoost]!,
+            jsonModelName: modelXGBoost,
+          ),
+        if (stablecoinModelInfoByCoin[coin] != null) ...[
+          const SizedBox(height: 16),
           _buildStablecoinModelInfo(coin),
         ],
       ],
@@ -1760,75 +1840,127 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     final featureDetails = selectedDefinitions
         .map((model) {
           final counts = model.featureCounts.entries
-              .map((entry) => '${entry.key} ${entry.value}')
+              .map((entry) {
+                final role = switch (entry.key) {
+                  'classifier' => '分類',
+                  'regressor' => '迴歸',
+                  _ => entry.key,
+                };
+                return '$role ${entry.value}';
+              })
               .join('、');
-          return '${model.displayName}：$counts';
+          return '${_displayModelName(model.displayName)}：$counts';
         })
         .join('；');
-    final validation = info.validationRocAuc == null
-        ? info.validationMetricNote
-        : info.validationRocAuc!.toStringAsFixed(4);
-
+    final classificationTargets = selectedModels
+        .map(
+          (modelName) =>
+              '${_displayModelName(modelName)}：${_classificationTarget(coin, modelName)}',
+        )
+        .join('；');
+    final regressionNames = info.regressionModels
+        .map((model) => model.displayName)
+        .join('、');
+    final regressionFeatures = info.regressionModels
+        .map((model) => '${model.displayName}：${model.featureCount}')
+        .join('；');
     return _buildModelInfoPanel(
       title: '$coin 模型介紹',
-      description:
-          '使用最近 ${info.inputKlineCount} 根 ${info.klineInterval} K 線，'
-          '預測${info.predictionTarget}。',
+      description: '本系統將即時狀態監測、未來脫鉤預警與價格迴歸分開呈現。',
       items: {
-        '目前顯示模型': selectedModels.join('、'),
+        '目前顯示分類模型': selectedModels.map(_displayModelName).join('、'),
+        '輸入資料': '最近 ${info.inputKlineCount} 根 ${info.klineInterval} K 線',
+        '資料集涵蓋期間': info.datasetPeriod,
+        '分類目標': classificationTargets,
+        if (regressionNames.isNotEmpty) '迴歸比較模型': regressionNames,
+        '迴歸目標': '未來 6 小時最低價格',
+        if (regressionFeatures.isNotEmpty) '迴歸特徵數': regressionFeatures,
+        '輸出說明': '分類值為未校準風險分數（0–100），不是發生機率',
         if (components.isNotEmpty) '模型組成': components,
         if (featureDetails.isNotEmpty) '特徵數': featureDetails,
-        '驗證 ROC-AUC': validation,
+        if (info.validationRocAuc != null)
+          '驗證 ROC-AUC': info.validationRocAuc!.toStringAsFixed(4),
       },
     );
   }
 
-  /// 顯示單一模型的五項資料。
-  ///
-  /// 每個數據都有自己的卡片；桌面寬度足夠時盡量五張排成一列，
-  /// 寬度不足時自動切換為三欄、兩欄或單欄。
-  Widget _buildModelMetricSection({
+  Widget _buildTaskHeading({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 17, color: const Color(0xFF64D2FF)),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.48),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _taskType(String coin, String modelName) {
+    if (coin == 'USDC' && modelName == modelXGBoost) {
+      return '即時狀態監測';
+    }
+    if (coin == 'USDC' && modelName == modelTransformer0995) {
+      return '下一時點預警';
+    }
+    return '未來區間預警';
+  }
+
+  String _taskHorizon(String coin, String modelName) {
+    if (coin == 'USDC' && modelName == modelXGBoost) return '目前時點';
+    if (coin == 'USDC' && modelName == modelTransformer0995) {
+      return '下一根 1h K 線';
+    }
+    return '未來 6 小時';
+  }
+
+  Widget _buildClassificationModelSection({
     required String coin,
     required String modelName,
     required StablecoinModelMetrics data,
   }) {
     final prefix = _jsonPrefixFor(coin, modelName);
+    final displayModelName = _displayModelName(modelName);
 
     final metrics = <Widget>[
       _buildCompactMetricCell(
-        title: '目前價格',
-        value: _formatUsd(data.currentPrice),
-        jsonKey: '${prefix}_current_price',
-        subtitle: '$coin 目前市場價格',
-        color: const Color(0xFF64D2FF),
-      ),
-      _buildCompactMetricCell(
-        title: '6 小時最低價',
-        value: _formatUsd(data.future6hLow),
-        jsonKey: '${prefix}_future_6h_low',
-        subtitle: '$modelName 預測的未來六小時最低價格',
-        color: const Color(0xFFBF5AF2),
-      ),
-      _buildCompactMetricCell(
-        title: '價格差',
-        value: _formatPriceDifference(data.priceDiff),
-        jsonKey: '${prefix}_price_diff',
-        subtitle: _priceDiffSubtitle(data.priceDiff),
-        color: _priceDifferenceColor(data.priceDiff),
-      ),
-      _buildCompactMetricCell(
-        title: '脫鉤機率',
-        value: _formatPercent(data.depegProbability),
+        title: '脫鉤風險分數',
+        value: _formatRiskScore(data.riskScore),
         jsonKey: '${prefix}_depeg_probability',
-        subtitle: '$modelName 估計的 $coin 脫鉤機率',
-        color: _probabilityColor(data.depegProbability),
+        subtitle: '${_classificationTarget(coin, modelName)}；此分數不是發生機率',
+        color: _riskScoreColor(data.riskScore),
       ),
       _buildCompactMetricCell(
-        title: '風險等級',
-        value: data.riskLevel,
+        title: '監測等級',
+        value: _displayRiskLevel(data.riskLevel),
         jsonKey: '${prefix}_risk_level',
-        subtitle: '後端回傳的風險等級',
-        color: _riskLevelColor(data.riskLevel, data.depegProbability),
+        subtitle: '依風險分數區間顯示，不代表事件一定發生',
+        color: _riskLevelColor(data.riskLevel, data.riskScore),
       ),
     ];
 
@@ -1845,21 +1977,76 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
             ),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.analytics_outlined,
-                size: 15,
-                color: Color(0xFF2997FF),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.analytics_outlined,
+                      size: 15,
+                      color: Color(0xFF2997FF),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        displayModelName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
-                modelName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                _taskType(coin, modelName),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 7),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.025),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Wrap(
+            spacing: 18,
+            runSpacing: 5,
+            children: [
+              Text(
+                '預測目標：${_classificationTarget(coin, modelName)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.68),
+                ),
+              ),
+              Text(
+                '時間範圍：${_taskHorizon(coin, modelName)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.68),
+                ),
+              ),
+              Text(
+                '輸出性質：未校準風險分數',
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.68),
                 ),
               ),
             ],
@@ -1869,11 +2056,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         LayoutBuilder(
           builder: (context, constraints) {
             final int columns;
-            if (constraints.maxWidth >= 900) {
-              columns = 5;
-            } else if (constraints.maxWidth >= 650) {
-              columns = 3;
-            } else if (constraints.maxWidth >= 390) {
+            if (constraints.maxWidth >= 390) {
               columns = 2;
             } else {
               columns = 1;
@@ -1883,6 +2066,66 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
             final cardWidth =
                 (constraints.maxWidth - spacing * (columns - 1)) / columns;
 
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (final metric in metrics)
+                  SizedBox(width: cardWidth, child: metric),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRegressionModelSection({
+    required String coin,
+    required String modelName,
+    required String jsonModelName,
+    required StablecoinModelMetrics data,
+  }) {
+    final prefix = _jsonPrefixFor(coin, jsonModelName);
+    final metrics = <Widget>[
+      _buildCompactMetricCell(
+        title: '6 小時最低價估計',
+        value: _formatUsd(data.future6hLow),
+        jsonKey: '${prefix}_future_6h_low',
+        subtitle: '$modelName 對未來 6 小時最低價格的估計',
+        color: const Color(0xFFBF5AF2),
+      ),
+      _buildCompactMetricCell(
+        title: '預估價差',
+        value: _formatPriceDifference(data.priceDiff),
+        jsonKey: '${prefix}_price_diff',
+        subtitle: _priceDiffSubtitle(data.priceDiff),
+        color: _priceDifferenceColor(data.priceDiff),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          modelName,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '預測目標：未來 6 小時最低價格',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
+        const SizedBox(height: 7),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 390 ? 2 : 1;
+            const spacing = 8.0;
+            final cardWidth =
+                (constraints.maxWidth - spacing * (columns - 1)) / columns;
             return Wrap(
               spacing: spacing,
               runSpacing: spacing,
@@ -2026,9 +2269,11 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
           const SizedBox(width: 9),
           Expanded(
             child: Text(
-              '聲明：本系統依歷史市場資料與模型輸出提供研究資訊，僅供專題展示，'
-              '不構成投資建議、交易邀約或收益保證。加密資產價格波動大，模型分數與'
-              '預測方向可能失準，使用者應自行評估並承擔交易風險。',
+              '聲明：本系統依歷史市場資料與模型輸出提供研究資訊，僅供專題展示。'
+              '穩定幣分類模型的標籤與預測範圍依模型而異，畫面數值為未校準的風險分數，'
+              '不是事件發生機率。即時狀態監測與未來風險預警屬於不同任務，不直接合併。'
+              '所有價格估計、風險分數與預測方向皆可能失準，不構成投資建議、交易邀約或'
+              '收益保證。',
               style: TextStyle(
                 fontSize: 11,
                 height: 1.55,
@@ -2318,12 +2563,14 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
                           if (showModels) ...[
                             const SizedBox(height: 14),
                             _buildSectionTitle(
-                              canSelectModels ? '模型（可複選）' : '模型（請先至少選一個穩定幣）',
+                              canSelectModels
+                                  ? '分類模型（可複選）'
+                                  : '分類模型（請先至少選一個穩定幣）',
                             ),
                             const SizedBox(height: 8),
                             ...models.map(
                               (model) => _buildMenuOption(
-                                text: model,
+                                text: _displayModelName(model),
                                 isSelected: selectedModels.contains(model),
                                 enabled: canSelectModels,
                                 onTap: () => _toggleModel(model),
@@ -2445,7 +2692,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
           if (isStableCoinCategory && selectedModels.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              '模型：${selectedModels.join(', ')}',
+              '模型：${selectedModels.map(_displayModelName).join(', ')}',
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.white.withValues(alpha: 0.72),
@@ -2472,6 +2719,10 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
 
   String _formatUsd(double value) {
     return '\$${value.toStringAsFixed(6)}';
+  }
+
+  String _formatRiskScore(double score) {
+    return '${score.toStringAsFixed(2)} / 100';
   }
 
   String _formatCryptoPrice(double value) {
@@ -2543,10 +2794,33 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     return const Color(0xFF64D2FF);
   }
 
-  Color _probabilityColor(double probability) {
-    if (probability >= 70) return const Color(0xFFFF453A);
-    if (probability >= 30) return const Color(0xFFFFD60A);
+  Color _riskScoreColor(double score) {
+    if (score >= 70) return const Color(0xFFFF453A);
+    if (score >= 50) return const Color(0xFFFFD60A);
     return const Color(0xFF30D158);
+  }
+
+  String _displayRiskLevel(String riskLevel) {
+    final normalized = riskLevel.trim().toLowerCase();
+    if (normalized.contains('high') ||
+        normalized.contains('danger') ||
+        normalized.contains('嚴重') ||
+        normalized.contains('高')) {
+      return '高風險';
+    }
+    if (normalized.contains('medium') ||
+        normalized.contains('moderate') ||
+        normalized.contains('預警') ||
+        normalized.contains('中')) {
+      return '風險預警';
+    }
+    if (normalized.contains('low') ||
+        normalized.contains('safe') ||
+        normalized.contains('安全') ||
+        normalized.contains('低')) {
+      return '低風險';
+    }
+    return riskLevel;
   }
 
   Color _trendColor(String trendLabel) {
@@ -2559,8 +2833,8 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     return const Color(0xFFFF453A);
   }
 
-  /// 優先依後端 risk_level 文字上色；無法辨識時才參考機率。
-  Color _riskLevelColor(String riskLevel, double probability) {
+  /// 優先依後端 risk_level 文字上色；無法辨識時才參考風險分數。
+  Color _riskLevelColor(String riskLevel, double riskScore) {
     final normalized = riskLevel.trim().toLowerCase();
 
     if (normalized.contains('high') ||
@@ -2581,7 +2855,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
       return const Color(0xFF30D158);
     }
 
-    return _probabilityColor(probability);
+    return _riskScoreColor(riskScore);
   }
 }
 
