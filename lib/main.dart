@@ -623,18 +623,18 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   String _classificationTarget(String coin, String modelName) {
     if (coin == 'USDC') {
       if (modelName == modelTransformer0995) {
-        return '下一個 1h 時點收盤價是否低於 0.995';
+        return '未來 6 小時最低收盤價是否低於 0.995';
       }
       if (modelName == modelTransformer099) {
-        return '未來區間最低價是否低於 0.99';
+        return '未來 6 小時最低收盤價是否低於 0.99';
       }
-      return '目前時點收盤價是否低於 0.995';
+      return '未來 6 小時最低收盤價是否低於 0.995';
     }
 
     if (modelName == modelTransformer0995) {
-      return '未來區間最低價是否低於 0.995';
+      return '未來 24 小時最低價是否低於 0.995';
     }
-    return '未來區間最低價是否低於 0.99';
+    return '未來 24 小時最低價是否低於 0.99';
   }
 
   /// 模型顯示名稱對應 JSON 中的模型代稱。
@@ -1798,7 +1798,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         _buildTaskHeading(
           icon: Icons.show_chart_rounded,
           title: '迴歸模型比較',
-          description: '估計未來 6 小時最低價格；相同迴歸器只顯示一次。',
+          description: '不同迴歸模型依各自訓練目標估計未來區間最低價格。',
         ),
         const SizedBox(height: 7),
         if (selectedTransformer != null &&
@@ -1873,7 +1873,9 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         '資料集涵蓋期間': info.datasetPeriod,
         '分類目標': classificationTargets,
         if (regressionNames.isNotEmpty) '迴歸比較模型': regressionNames,
-        '迴歸目標': '未來 6 小時最低價格',
+        '迴歸目標': coin == 'TUSD'
+            ? 'Transformer：未來 6 小時；XGBoost：未來 24 小時'
+            : 'Transformer、XGBoost：未來 6 小時最低價格',
         if (regressionFeatures.isNotEmpty) '迴歸特徵數': regressionFeatures,
         '輸出說明': '分類值為未校準風險分數（0–100），不是發生機率',
         if (components.isNotEmpty) '模型組成': components,
@@ -1922,21 +1924,18 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   }
 
   String _taskType(String coin, String modelName) {
-    if (coin == 'USDC' && modelName == modelXGBoost) {
-      return '即時狀態監測';
-    }
-    if (coin == 'USDC' && modelName == modelTransformer0995) {
-      return '下一時點預警';
-    }
     return '未來區間預警';
   }
 
   String _taskHorizon(String coin, String modelName) {
-    if (coin == 'USDC' && modelName == modelXGBoost) return '目前時點';
-    if (coin == 'USDC' && modelName == modelTransformer0995) {
-      return '下一根 1h K 線';
+    return coin == 'USDC' ? '未來 6 小時' : '未來 24 小時';
+  }
+
+  String _regressionHorizon(String coin, String modelName) {
+    if (coin == 'TUSD' && modelName == 'XGBoost Regression') {
+      return '24 小時';
     }
-    return '未來 6 小時';
+    return '6 小時';
   }
 
   Widget _buildClassificationModelSection({
@@ -2087,12 +2086,13 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     required StablecoinModelMetrics data,
   }) {
     final prefix = _jsonPrefixFor(coin, jsonModelName);
+    final horizon = _regressionHorizon(coin, modelName);
     final metrics = <Widget>[
       _buildCompactMetricCell(
-        title: '6 小時最低價估計',
+        title: '$horizon最低價估計',
         value: _formatUsd(data.future6hLow),
         jsonKey: '${prefix}_future_6h_low',
-        subtitle: '$modelName 對未來 6 小時最低價格的估計',
+        subtitle: '$modelName 對未來 $horizon最低價格的估計',
         color: const Color(0xFFBF5AF2),
       ),
       _buildCompactMetricCell(
@@ -2113,7 +2113,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         ),
         const SizedBox(height: 3),
         Text(
-          '預測目標：未來 6 小時最低價格',
+          '預測目標：未來 $horizon最低價格',
           style: TextStyle(
             fontSize: 11,
             color: Colors.white.withValues(alpha: 0.5),
