@@ -1798,7 +1798,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         _buildTaskHeading(
           icon: Icons.show_chart_rounded,
           title: '迴歸模型比較',
-          description: '不同迴歸模型依各自訓練目標估計未來區間最低價格。',
+          description: '比較 Transformer 與 XGBoost 對未來 6 小時最低價格的估計。',
         ),
         const SizedBox(height: 7),
         if (selectedTransformer != null &&
@@ -1873,9 +1873,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
         '資料集涵蓋期間': info.datasetPeriod,
         '分類目標': classificationTargets,
         if (regressionNames.isNotEmpty) '迴歸比較模型': regressionNames,
-        '迴歸目標': coin == 'TUSD'
-            ? 'Transformer：未來 6 小時；XGBoost：未來 24 小時'
-            : 'Transformer、XGBoost：未來 6 小時最低價格',
+        '迴歸比較口徑': 'Transformer、XGBoost：未來 6 小時最低價格',
         if (regressionFeatures.isNotEmpty) '迴歸特徵數': regressionFeatures,
         '輸出說明': '分類值為未校準風險分數（0–100），不是發生機率',
         if (components.isNotEmpty) '模型組成': components,
@@ -1932,9 +1930,7 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   }
 
   String _regressionHorizon(String coin, String modelName) {
-    if (coin == 'TUSD' && modelName == 'XGBoost Regression') {
-      return '24 小時';
-    }
+    // TODO: TUSD XGBoost 舊權重仍為 24 小時目標，需換成 6 小時重訓權重。
     return '6 小時';
   }
 
