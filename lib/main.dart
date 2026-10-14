@@ -623,16 +623,16 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   String _classificationTarget(String coin, String modelName) {
     if (coin == 'USDC') {
       if (modelName == modelTransformer0995) {
-        return '未來 6 小時最低收盤價是否低於 0.995';
+        return '下一個 1h 時點收盤價是否低於或等於 0.995';
       }
       if (modelName == modelTransformer099) {
-        return '未來 6 小時最低收盤價是否低於 0.99';
+        return '下一個 1h 時點收盤價是否低於或等於 0.99';
       }
       return '未來 6 小時最低收盤價是否低於 0.995';
     }
 
     if (modelName == modelTransformer0995) {
-      return '未來 24 小時最低價是否低於 0.995';
+      return '下一個 1h 時點收盤價是否低於或等於 0.995';
     }
     return '未來 24 小時最低價是否低於 0.99';
   }
@@ -1921,11 +1921,17 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     );
   }
 
+  bool _isNextHourTarget(String coin, String modelName) {
+    return modelName == modelTransformer0995 ||
+        (coin == 'USDC' && modelName == modelTransformer099);
+  }
+
   String _taskType(String coin, String modelName) {
-    return '未來區間預警';
+    return _isNextHourTarget(coin, modelName) ? '下一時點預警' : '未來區間預警';
   }
 
   String _taskHorizon(String coin, String modelName) {
+    if (_isNextHourTarget(coin, modelName)) return '下一根 1h K 線';
     return coin == 'USDC' ? '未來 6 小時' : '未來 24 小時';
   }
 
