@@ -74513,11 +74513,12 @@ A.A0.prototype={
 q_(a){if(a==="Transformer0.995")return"Transformer 0.995"
 if(a==="Transformer0.99")return"Transformer 0.99"
 return a},
-zw(a,b){var s="Transformer0.995",r="\u4e0b\u4e00\u500b 1h \u6642\u9ede\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc\u6216\u7b49\u65bc 0.995"
-if(a==="USDC"){if(b===s)return r
-if(b==="Transformer0.99")return"\u4e0b\u4e00\u500b 1h \u6642\u9ede\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc\u6216\u7b49\u65bc 0.99"
-return"\u672a\u4f86 6 \u5c0f\u6642\u6700\u4f4e\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc 0.995"}if(b===s)return r
-return"\u672a\u4f86 24 \u5c0f\u6642\u6700\u4f4e\u50f9\u662f\u5426\u4f4e\u65bc 0.99"},
+zw(a,b){var s="Transformer0.995"
+if(a==="USDC"){if(b===s)return"\u4e0b\u4e00\u5c0f\u6642\u8d77 6 \u5c0f\u6642\u5167\u6700\u4f4e\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc\u6216\u7b49\u65bc 0.995"
+if(b==="Transformer0.99")return"\u4e0b\u4e00\u5c0f\u6642\u8d77 6 \u5c0f\u6642\u5167\u6700\u4f4e\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc\u6216\u7b49\u65bc 0.99"
+return"\u542b\u76ee\u524d\u9019\u5c0f\u6642\u7684 6 \u5c0f\u6642\u5167\u6700\u4f4e\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc 0.995"}if(b===s)return"\u4e0b\u4e00\u500b 1h \u6642\u9ede\u6536\u76e4\u50f9\u662f\u5426\u4f4e\u65bc\u6216\u7b49\u65bc 0.995"
+if(b==="Transformer0.99")return"\u4e0b\u4e00\u5c0f\u6642\u4e4b\u5f8c 24 \u5c0f\u6642\u5167\u6700\u4f4e\u50f9\u662f\u5426\u4f4e\u65bc 0.99"
+return"\u4e0b\u4e00\u5c0f\u6642\u8d77 24 \u5c0f\u6642\u5167\u6700\u4f4e\u50f9\u662f\u5426\u4f4e\u65bc 0.99"},
 aE(){this.aZ()},
 l(){this.d.l()
 this.aJ()},
@@ -74818,10 +74819,7 @@ if(h!=null)o.m(0,"\u9a57\u8b49 ROC-AUC",B.d.V(h,4))
 return i.IM("\u672c\u7cfb\u7d71\u5c07\u5373\u6642\u72c0\u614b\u76e3\u6e2c\u3001\u672a\u4f86\u812b\u9264\u9810\u8b66\u8207\u50f9\u683c\u8ff4\u6b78\u5206\u958b\u5448\u73fe\u3002",o,a+" \u6a21\u578b\u4ecb\u7d39")},
 zm(a,b,c){var s=null,r=t.p
 return A.dv(A.c([A.vX(b,B.b5,s,17),B.y_,A.f0(A.cM(A.c([A.bm(c,s,s,B.ys,s),B.MJ,A.bm(a,s,s,A.bF(s,s,B.f.au(0.48),s,s,s,s,s,s,s,s,11,s,s,s,s,1.4,!0,s,s,s,s,s,s,s,s),s)],r),B.T,B.O,B.D))],r),B.T,B.D,0)},
-aaF(a,b){var s
-if(b!=="Transformer0.995")s=a==="USDC"&&b==="Transformer0.99"
-else s=!0
-if(s)return"\u4e0b\u4e00\u6839 1h K \u7dda"
+aaF(a,b){if(a==="TUSD"&&b==="Transformer0.995")return"\u4e0b\u4e00\u6839 1h K \u7dda"
 return a==="USDC"?"\u672a\u4f86 6 \u5c0f\u6642":"\u672a\u4f86 24 \u5c0f\u6642"},
 a_g(a,b,c){var s,r,q,p=this,o=null,n=p.LH(a,c),m=p.q_(c),l=b.d,k=B.d.V(l,2),j=p.zw(a,c)
 k=p.jI(p.MW(l),n+"_depeg_probability",j+"\uff1b\u6b64\u5206\u6578\u4e0d\u662f\u767c\u751f\u6a5f\u7387","\u812b\u9264\u98a8\u96aa\u5206\u6578",k+" / 100")
@@ -74832,9 +74830,7 @@ q=A.c([k,p.jI(p.a9c(j,l),n+"_risk_level","\u4f9d\u98a8\u96aa\u5206\u6578\u5340\u
 s=A.d9(7)
 l=A.eV(B.bg.au(0.18))
 j=A.f0(A.dv(A.c([B.DL,B.xZ,new A.kJ(1,B.fy,A.bm(m,1,B.c7,B.yo,o),o)],r),B.L,B.D,0))
-if(c!=="Transformer0.995")k=a==="USDC"&&c==="Transformer0.99"
-else k=!0
-k=k?"\u4e0b\u4e00\u6642\u9ede\u9810\u8b66":"\u672a\u4f86\u5340\u9593\u9810\u8b66"
+k=a==="TUSD"&&c==="Transformer0.995"?"\u4e0b\u4e00\u6642\u9ede\u9810\u8b66":"\u672a\u4f86\u5340\u9593\u9810\u8b66"
 s=A.dm(o,A.dv(A.c([j,B.y0,A.bm(k,o,o,A.bF(o,o,B.f.au(0.55),o,o,o,o,o,o,o,o,11,o,o,o,o,o,!0,o,o,o,o,o,o,o,o),o)],r),B.L,B.D,0),B.o,o,new A.cd(B.m4,o,l,s,o,o,B.a4),o,o,o,B.CB,o,o,o)
 l=B.f.au(0.025)
 k=A.d9(7)

@@ -635,20 +635,24 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
   }
 
   String _classificationTarget(String coin, String modelName) {
+    // 依訓練程式與標籤資料核對後的定義。
     if (coin == 'USDC') {
       if (modelName == modelTransformer0995) {
-        return '下一個 1h 時點收盤價是否低於或等於 0.995';
+        return '下一小時起 6 小時內最低收盤價是否低於或等於 0.995';
       }
       if (modelName == modelTransformer099) {
-        return '下一個 1h 時點收盤價是否低於或等於 0.99';
+        return '下一小時起 6 小時內最低收盤價是否低於或等於 0.99';
       }
-      return '未來 6 小時最低收盤價是否低於 0.995';
+      return '含目前這小時的 6 小時內最低收盤價是否低於 0.995';
     }
 
     if (modelName == modelTransformer0995) {
       return '下一個 1h 時點收盤價是否低於或等於 0.995';
     }
-    return '未來 24 小時最低價是否低於 0.99';
+    if (modelName == modelTransformer099) {
+      return '下一小時之後 24 小時內最低價是否低於 0.99';
+    }
+    return '下一小時起 24 小時內最低價是否低於 0.99';
   }
 
   /// 模型顯示名稱對應 JSON 中的模型代稱。
@@ -1935,9 +1939,9 @@ class _CryptoDashboardPageState extends State<CryptoDashboardPage> {
     );
   }
 
+  /// Only TUSD Transformer 0.995 predicts the next 1h close; the USDC Transformers use a 6-hour window.
   bool _isNextHourTarget(String coin, String modelName) {
-    return modelName == modelTransformer0995 ||
-        (coin == 'USDC' && modelName == modelTransformer099);
+    return coin == 'TUSD' && modelName == modelTransformer0995;
   }
 
   String _taskType(String coin, String modelName) {
